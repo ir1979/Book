@@ -1,0 +1,12 @@
+title: "My First Quarto Book"
+format: html
+output:
+  html: default
+  pdf: default
+chapters:
+  - ch01_Theoretic_Concepts
+  - ch02_Python_and_Libraries
+  - ch03_Pytorch_Basics.qmd
+  - ch04_PyTorch_for_Computer_Vision.qmd
+  - ch05_GANs_and_Document_Images.qmd
+

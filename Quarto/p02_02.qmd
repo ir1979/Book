@@ -1,0 +1,116 @@
+---
+jupyter: python3
+---
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import TensorDataset, DataLoader
+
+# Constants
+EPOCHS = 5000
+BATCH_SIZE = 1000
+LEARNING_RATE = 0.001
+SEED = 10
+
+# Check if CUDA is available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
+
+# Generate and preprocess data
+def generate_data(num_samples=1000, train_ratio=0.8):
+    t = np.random.uniform(0, 2*np.pi, num_samples)
+    noise = 0 #np.random.randn(num_samples)/1000
+    r = 2+3*np.sin(t)+noise
+  
+    # Convert to PyTorch tensors
+    t = torch.Tensor(t).to(device)
+    r = torch.Tensor(r).to(device)
+
+    # Split data into train and test sets
+    train_size = int(train_ratio * num_samples)
+    r_train, t_train = r[:train_size], t[:train_size]
+    r_test, t_test = r[train_size:], t[train_size:]
+    
+    return t_train, r_train, t_test, r_test
+
+# Model definition
+class PolarRegression(nn.Module):
+    def __init__(self):
+        super(PolarRegression, self).__init__()
+        self.linear = nn.Linear(4, 1, bias=False)   # 3:  sin(t)  cos(t)  t
+    
+    def forward(self, t):
+        t=t.view(-1,1)
+        features = torch.cat([torch.sin(t), torch.cos(t), t, torch.ones_like(t)], dim=1)
+        return self.linear(features)
+
+# Training loop
+def train(model, dataloader, criterion, optimizer, epochs):
+    model.to(device)
+    for epoch in range(epochs):
+        for t, r in dataloader:
+            t, r = t.to(device), r.to(device)
+            optimizer.zero_grad()
+            outputs = model(t).view(-1, 1)
+            r = r.view(-1, 1)
+            loss = criterion(r, outputs)
+            loss.backward()
+            optimizer.step()
+        
+        if (epoch + 1) % 100 == 0:
+            print(f"Epoch [{epoch+1}/{epochs}], Loss: {loss.item():.4f}")
+
+# Prediction
+def predict(model, t):
+    model.to(device)
+    with torch.no_grad():
+        model.eval()
+        if type(t) is not torch.Tensor:
+            t = torch.from_numpy(t).float().view(-1, 1).to(device)
+        outputs = model(t)
+        data_pred = outputs.cpu().numpy()
+    return data_pred
+
+# Main program
+if __name__ == "__main__":
+    # Set the numpy seed
+    np.random.seed(SEED)
+    
+    # Generate and preprocess data
+    t_train, r_train, t_test, r_test = generate_data()
+    dataset = TensorDataset(t_train, r_train)
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+
+    # Create model, loss function, and optimizer
+    model = PolarRegression()
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+    # Train the model
+    train(model, dataloader, criterion, optimizer, epochs=EPOCHS)
+
+    # Print the predicted coefficients (model weights)
+    print(f"Predicted Coefficients: {model.linear.weight.data.cpu().numpy().flatten()}")
+
+    # Evaluate on train data
+    r_pred_train = predict(model, t_train)
+
+    # Evaluate on test data
+    r_pred_test = predict(model, t_test)
+
+    # Plot original and predicted data
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='polar')
+    ax.plot(t_train.cpu().numpy(), r_train.cpu().numpy(), 'r.', label='Original (Train)')
+    ax.plot(t_train.cpu().numpy(), r_pred_train, 'y.', label='Predicted (Train)')
+    ax.plot(t_test.cpu().numpy(), r_test.cpu().numpy(), 'g.', label='Original (Test)')
+    ax.plot(t_test.cpu().numpy(), r_pred_test, 'b.', label='Predicted (Test)')
+    ax.legend()
+    plt.show()
+```
+

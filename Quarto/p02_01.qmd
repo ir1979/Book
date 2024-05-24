@@ -1,0 +1,305 @@
+---
+jupyter: python3
+---
+
+## Import required libraries
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+```
+
+```{python}
+x = np.linspace(-10, 10, 100)
+```
+
+```{python}
+x
+```
+
+```{python}
+x.shape
+```
+
+```{python}
+noise = np.random.randn(100)
+```
+
+```{python}
+noise
+```
+
+```{python}
+noise.shape
+```
+
+```{python}
+y = 5+4*x+3*x*x+noise
+```
+
+```{python}
+y
+```
+
+```{python}
+x_orig = x
+y_orig = y
+```
+
+```{python}
+y.shape
+```
+
+```{python}
+# plot x,y
+plt.plot(x, y)
+```
+
+```{python}
+# make x into 2D
+x = x.reshape(-1, 1)
+print(x.shape)
+
+# make y into 2D
+y = y.reshape(-1, 1)
+print(y.shape)
+
+#concatenate x,y
+data = np.concatenate([x, y], axis=1)
+data.shape
+```
+
+## Save data into csv file
+
+```{python}
+np.savetxt('data.csv', data, delimiter=',', fmt='%.4f')
+```
+
+## Load data using DataLoader in PyTorch
+
+```{python}
+import torch
+from torch.utils.data import Dataset, DataLoader
+
+# create a custom dataset class
+class MyData(Dataset):
+    def __init__(self, csv_path):
+        
+        self.path = csv_path
+        self.data = np.loadtxt(csv_path, delimiter=',')
+
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        x = self.data[index, :-1]
+        y = self.data[index, -1]
+        return x, y
+
+
+myDataset = MyData("data.csv")
+myDataLoader = DataLoader(myDataset, batch_size=4, shuffle=True)
+
+for idx, val in enumerate(myDataLoader):
+    print(idx, val)
+
+    if idx>=1:
+        break
+
+
+    
+    
+    
+```
+
+## Create a PyTorch model
+
+```{python}
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+class MyModel(nn.Module):
+    def __init__(self, degree=2):
+        super(MyModel, self).__init__()
+        self.degree = degree
+        self.linear = nn.Linear(degree+1, 1, bias=False)
+    
+    def forward(self, x):
+        new_x = torch.cat([x**i for i in range(self.degree+1)], dim=1)
+        return self.linear(new_x)
+
+EPOCHS = 1000
+model = MyModel(degree = 2)
+criterion = nn.MSELoss()
+model_parameters = list(model.parameters())
+print(model_parameters)
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+%timeit
+# train MyModel
+for epoch in range(EPOCHS):
+    for x, y in myDataLoader:
+        x = x.float()
+        y = y.float().view(-1, 1)
+
+        pred = model(x)
+
+        loss = criterion(pred, y)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        
+    if (epoch + 1) % 100 == 0:
+        print(f"Epoch [{epoch+1}/{EPOCHS}], Loss: {loss.item():.4f}")
+
+# show the model parameters
+print(model.linear.weight)
+```
+
+```{python}
+# plot x,y
+x = x_orig
+y = y_orig
+
+plt.clf()
+plt.plot(x, y, color='r')
+
+x2 = torch.Tensor(x).view(-1,1)
+
+with torch.no_grad():
+    model.eval()
+    plt.plot(x, model(x2).numpy()+0.5, color='b')
+
+plt.legend(['original', 'predicted'])
+plt.show()
+```
+
+## The final a factorized code
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import TensorDataset, DataLoader
+
+# Constants
+EPOCHS = 1000
+BATCH_SIZE = 4
+LEARNING_RATE = 0.001
+SEED = 100
+
+
+# Generate and preprocess data
+def generate_data(degree, num_samples=100, train_ratio=0.8):
+    x = np.linspace(-10, 10, num_samples)
+    noise = np.random.randn(num_samples)
+    coefficients = np.random.randn(degree + 1)*10
+    print(f"Generated Coefficients: {coefficients}")
+    y = np.zeros_like(x)
+    for i in range(degree + 1):
+        y += coefficients[i] * x**i
+    y += noise
+    
+    # Split data into train and test sets
+    train_size = int(train_ratio * num_samples)
+    x_train, y_train = x[:train_size], y[:train_size]
+    x_test, y_test = x[train_size:], y[train_size:]
+    
+    return x_train, y_train, x_test, y_test
+
+def preprocess_data(x, y):
+    x = torch.from_numpy(x).float().view(-1, 1)
+    y = torch.from_numpy(y).float().view(-1, 1)
+    return x, y
+
+# Model definition
+class PolynomialRegression(nn.Module):
+    def __init__(self, degree):
+        super(PolynomialRegression, self).__init__()
+        self.degree = degree
+        self.linear = nn.Linear(degree+1, 1, bias=False)
+    
+    def forward(self, x):
+        features = torch.cat([x**i for i in range(self.degree+1)], dim=1)
+        return self.linear(features)
+
+# Training loop
+def train(model, dataloader, criterion, optimizer, epochs):
+    for epoch in range(epochs):
+        for inputs, targets in dataloader:
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+            loss.backward()
+            optimizer.step()
+        
+        if (epoch + 1) % 100 == 0:
+            print(f"Epoch [{epoch+1}/{epochs}], Loss: {loss.item():.4f}")
+
+# Evaluation
+def evaluate(model, x, y):
+    with torch.no_grad():
+        model.eval()
+        x = preprocess_data(x, y)[0]
+        outputs = model(x)
+        y_pred = outputs.numpy()
+    return y_pred
+
+def predict(model, x):
+    with torch.no_grad():
+        model.eval()
+        if type(x) is not torch.Tensor:
+            x = torch.from_numpy(x).float().view(-1, 1)
+        outputs = model(x)
+        y_pred = outputs.numpy()
+    return y_pred
+
+# Main program
+if __name__ == "__main__":
+    # Set the numpy seed
+    np.random.seed(SEED)
+    
+    # Set the desired target degree
+    target_degree = 4
+
+    # Set the model degree
+    model_degree = target_degree
+    
+    # Generate and preprocess data
+    x_train, y_train, x_test, y_test = generate_data(target_degree)
+    x_train, y_train = preprocess_data(x_train, y_train)
+    dataset = TensorDataset(x_train, y_train)
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+
+    # Create model, loss function, and optimizer
+    model = PolynomialRegression(degree=model_degree)
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+    # Train the model
+    train(model, dataloader, criterion, optimizer, epochs=EPOCHS)
+
+    # Print the predicted coefficients (model weights)
+    print(f"Predicted Coefficients: {model.linear.weight.data.numpy().flatten()}")
+
+
+    # Evaluate on train data
+    y_pred_train = predict(model, x_train)
+
+    # Evaluate on test data
+    y_pred_test = predict(model, x_test)
+
+    # Plot original, predicted, and test data
+    plt.plot(x_train, y_train, color='r', label='Original (Train)')
+    plt.plot(x_train, y_pred_train+0.5, color='y', label='Predicted (Train)')
+    plt.plot(x_test, y_test, color='g', label='Original (Test)')
+    plt.plot(x_test, y_pred_test, color='b', label='Predicted (Test)')
+    plt.legend()
+    plt.show()
+```
+
+

@@ -1,0 +1,36 @@
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore Quarto cache and output files
+.quarto/
+*.html
+*.docx
+
+# Ignore figure output directories
+ch*_files/
+# figure-*/
+
+# Ignore data files and directories
+data/
+images/classification/bird/*
+images/classification/butterfly/*
+# *.csv
+*.tar.gz
+
+# Ignore image files
+# *.jpg
+# *.jpeg
+# *.png
+# *.gif
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore log files and directories
+logs/
+*.log
+
+# Ignore temporary files
+.tmp*
+
